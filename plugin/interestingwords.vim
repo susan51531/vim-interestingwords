@@ -37,6 +37,13 @@ function! ColorWord(word, mode)
   let s:interestingModes[n] = a:mode
   let s:mids[a:word] = mid
 
+  call s:apply_color_to_word(n, a:word, a:mode, mid)
+
+  call s:markRecentlyUsed(n)
+
+endfunction
+
+function! s:apply_color_to_word(n, word, mode, mid)
   let case = s:checkIgnoreCase(a:word) ? '\c' : '\C'
   if a:mode == 'v'
     let pat = case . '\V\zs' . escape(a:word, '\') . '\ze'
@@ -44,10 +51,10 @@ function! ColorWord(word, mode)
     let pat = case . '\V\<' . escape(a:word, '\') . '\>'
   endif
 
-  call matchadd("InterestingWord" . (n + 1), pat, 1, mid)
-
-  call s:markRecentlyUsed(n)
-
+  try
+    call matchadd("InterestingWord" . (a:n + 1), pat, 1, a:mid)
+  catch /E801/      " match id already taken.
+  endtry
 endfunction
 
 function! s:nearest_group_at_cursor() abort
@@ -154,6 +161,18 @@ function! UncolorAllWords()
   endfor
 endfunction
 
+function! RecolorAllWords()
+  let i = 0
+  for word in s:interestingWords
+    if (type(word) == 1)
+      let mode = s:interestingModes[i]
+      let mid = s:mids[word]
+      call s:apply_color_to_word(i, word, mode, mid)
+    endif
+    let i += 1
+  endfor
+endfunction
+
 " returns true if the ignorecase flag needs to be used
 function! s:checkIgnoreCase(word)
   " return false if case sensitive is used
@@ -172,6 +191,13 @@ function! s:markRecentlyUsed(n)
   call add(s:recentlyUsed, a:n)
 endfunction
 
+function! s:uiMode()
+  " Stolen from airline's airline#init#gui_mode()
+  return ((has('nvim') && exists('$NVIM_TUI_ENABLE_TRUE_COLOR') && !exists("+termguicolors"))
+     \ || has('gui_running') || (has("termtruecolor") && &guicolors == 1) || (has("termguicolors") && &termguicolors == 1)) ?
+      \ 'gui' : 'cterm'
+endfunction
+
 " initialise highlight colors from list of GUIColors
 " initialise length of s:interestingWord list
 " initialise s:recentlyUsed list
@@ -179,13 +205,8 @@ function! s:buildColors()
   if (s:hasBuiltColors)
     return
   endif
-  if has('gui_running')
-    let ui = 'gui'
-    let wordColors = g:interestingWordsGUIColors
-  else
-    let ui = 'cterm'
-    let wordColors = g:interestingWordsTermColors
-  endif
+  let ui = s:uiMode()
+  let wordColors = (ui == 'gui') ? g:interestingWordsGUIColors : g:interestingWordsTermColors
   if (exists('g:interestingWordsRandomiseColors') && g:interestingWordsRandomiseColors)
     " fisher-yates shuffle
     let i = len(wordColors)-1
