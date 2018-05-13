@@ -115,11 +115,15 @@ function! WordNavigation(direction)
     endif
     call search(pat, searchFlag)
   else
-    if (a:direction)
-      silent! normal! n
-    else
-      silent! normal! N
-    endif
+    try
+      if (a:direction)
+        normal! n
+      else
+        normal! N
+      endif
+    catch /E486/
+      echohl WarningMsg | echomsg "E486: Pattern not found: " . @/
+    endtry
   endif
 endfunction
 
